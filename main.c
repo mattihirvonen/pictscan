@@ -56,12 +56,21 @@ check_t       check;
 
 db_columns_t *db_next_entry( db_columns_t *entry )
 {
+    #if 1
+    return entry->next;       // Simulate usage of dynamically allocated memory
+    #else
     return ++entry;
+    #endif
 }
 
 db_columns_t *db_new_entry( db_columns_t *entry )
 {
+    #if 1
+    entry->next = entry + 1;   // Simulate dynamic memory allocation for new entry
+    return  entry->next;
+    #else
     return ++entry;
+    #endif
 }
 
 // ------------------------------------------------------------------------------------------
