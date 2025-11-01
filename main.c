@@ -24,8 +24,11 @@ typedef struct
     char unsorted[NAMESIZE];
 } check_t;
 
+
 typedef struct
 {
+    void     *next;    // Reserved for future use (dynamic database allocation)
+    //
     _off_t   fileSize;
     char     filePath[PATHSIZE];
     char     baseName[NAMESIZE];
@@ -39,8 +42,27 @@ typedef struct
     int      isunsorted;
 } db_columns_t;
 
+
+typedef struct
+{
+    int           count;   // Count of active database entries
+    db_columns_t *data;
+} database_t;
+
+
 db_columns_t  db_data[DB_SIZE];
 check_t       check;
+
+
+db_columns_t *db_next_entry( db_columns_t *entry )
+{
+    return ++entry;
+}
+
+db_columns_t *db_newS_entry( db_columns_t *entry )
+{
+    return ++entry;
+}
 
 // ------------------------------------------------------------------------------------------
 
@@ -73,12 +95,10 @@ void extractPathComponents(const char *filePath, char *path, char *baseName, cha
 
 
 // Return count of file infos added into data base
+//int scanDirectoryTree( db_columns_t **db_entries, int count, const char *dirPath)
 int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
 {
-    // FAKE trick:
-    // - Use same variable between recursed function calls !!!
-    // - Which makes function calls non reentrant
-
+//   db_columns_t *db_entry = db_entries;
     static db_columns_t *db_entry;
 
     if ( !db_entry ) db_entry = db;
@@ -110,7 +130,7 @@ int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
             {
                 printf("Directory: %s\n\n", fullPath);
                 // Recursively scan subdirectory
-                count = scanDirectoryTree(db_entry, count, fullPath);
+                count = scanDirectoryTree(&db_entry, count, fullPath);
             } else if (S_ISREG(pathStat.st_mode))
             {
                 extractPathComponents(fullPath, path, baseName, extension);
@@ -137,7 +157,7 @@ int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
                     printf("\n");
                     #endif
                     //
-                    db_entry += 1;
+                    db_entry = db_new_entry( db_entry );
                 }
             }
         } else {
@@ -249,6 +269,8 @@ int find_new_uploads( db_columns_t *db_entry, int count )
 
 int main(int argc, char *argv[])
 {
+    db_columns_t *db_entries = db_data;
+
     strncpy(check.upload,   UPLOAD,   NAMESIZE);
     strncpy(check.unsorted, UNSORTED, NAMESIZE);
 
@@ -256,6 +278,7 @@ int main(int argc, char *argv[])
     printf("Scanning directory: %s\n", startDir);
 
     int count = scanDirectoryTree(db_data, 0, startDir);
+//  int count = scanDirectoryTree(&db_entries, 0, startDir);
     printf("Files (all):      %d\n", count);
 
     int found = mark_upload_unsorted(db_data, &check, count);
