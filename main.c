@@ -28,6 +28,7 @@ typedef struct
 typedef struct
 {
     void     *next;    // Reserved for future use (dynamic database allocation)
+    void     *prev;
     //
     _off_t   fileSize;
     char     filePath[PATHSIZE];
@@ -57,7 +58,7 @@ check_t       check;
 db_columns_t *db_next_entry( db_columns_t *entry )
 {
     #if 1
-    return entry->next;       // Simulate usage of dynamically allocated memory
+    return entry->next;  // Simulate usage of dynamically allocated memory
     #else
     return ++entry;
     #endif
@@ -66,8 +67,12 @@ db_columns_t *db_next_entry( db_columns_t *entry )
 db_columns_t *db_new_entry( db_columns_t *entry )
 {
     #if 1
-    entry->next = entry + 1;   // Simulate dynamic memory allocation for new entry
-    return  entry->next;
+    // Simulate dynamic memory allocation for new db_entry
+    void  *prev = entry;
+    entry->next = entry + 1;
+    entry = entry->next;
+    entry->prev = prev;
+    return  entry;
     #else
     return ++entry;
     #endif
