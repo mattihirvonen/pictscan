@@ -59,7 +59,7 @@ db_columns_t *db_next_entry( db_columns_t *entry )
     return ++entry;
 }
 
-db_columns_t *db_newS_entry( db_columns_t *entry )
+db_columns_t *db_new_entry( db_columns_t *entry )
 {
     return ++entry;
 }
@@ -95,13 +95,9 @@ void extractPathComponents(const char *filePath, char *path, char *baseName, cha
 
 
 // Return count of file infos added into data base
-//int scanDirectoryTree( db_columns_t **db_entries, int count, const char *dirPath)
-int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
+int scanDirectoryTree( database_t *db, int count, const char *dirPath)
 {
-//   db_columns_t *db_entry = db_entries;
-    static db_columns_t *db_entry;
-
-    if ( !db_entry ) db_entry = db;
+    db_columns_t *db_entry = &db->data[ db->count ];
 
     char path[256], baseName[256], extension[256];
 
@@ -130,7 +126,7 @@ int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
             {
                 printf("Directory: %s\n\n", fullPath);
                 // Recursively scan subdirectory
-                count = scanDirectoryTree(&db_entry, count, fullPath);
+                count = scanDirectoryTree(db, count, fullPath);
             } else if (S_ISREG(pathStat.st_mode))
             {
                 extractPathComponents(fullPath, path, baseName, extension);
@@ -165,7 +161,8 @@ int scanDirectoryTree( db_columns_t *db, int count, const char *dirPath)
         }
     }
     closedir(dp);
-    return count;
+    db->count = count;
+    return  db->count;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -176,7 +173,7 @@ void print_db( db_columns_t *db_entry, int count )
     for( int i = 0; i < count; i++ )
     {
         printf( "%2d: %s - %s.%s\n", i, db_entry->filePath, db_entry->baseName, db_entry->extension);
-        db_entry += 1;
+        db_entry = db_next_entry( db_entry );
     }
 }
 
@@ -188,9 +185,12 @@ void print_new_upload( db_columns_t *db_entry )
 
 // ------------------------------------------------------------------------------------------
 
-int mark_upload_unsorted( db_columns_t *db_entry, check_t *check, int count )
+int mark_upload_unsorted( database_t *db, check_t *check )
 {
     int found = 0;
+    int count = db->count;
+
+    db_columns_t *db_entry = db->data;
 
     while ( count--  > 0 )
     {
@@ -202,7 +202,7 @@ int mark_upload_unsorted( db_columns_t *db_entry, check_t *check, int count )
             db_entry->isunsorted = 1;
             found += 1;
         }
-        db_entry += 1;
+        db_entry = db_next_entry( db_entry );
     }
     return found;
 }
@@ -230,9 +230,12 @@ int check_is_same_file( db_columns_t *entry1, db_columns_t *entry2 )
 }
 
 
-int find_new_uploads( db_columns_t *db_entry, int count )
+int find_new_uploads( database_t *db )
 {
     int found = 0;
+    int count = db->count;
+
+    db_columns_t *db_entry = db->data;
 
     for (int i = 0; i < count; i++)
     {
@@ -269,7 +272,10 @@ int find_new_uploads( db_columns_t *db_entry, int count )
 
 int main(int argc, char *argv[])
 {
-    db_columns_t *db_entries = db_data;
+    database_t  database;
+
+    memset( &database, 0, sizeof(database_t));
+    database.data = db_data;
 
     strncpy(check.upload,   UPLOAD,   NAMESIZE);
     strncpy(check.unsorted, UNSORTED, NAMESIZE);
@@ -277,14 +283,13 @@ int main(int argc, char *argv[])
     const char *startDir = argc > 1 ? argv[1] : "."; // Default to current directory
     printf("Scanning directory: %s\n", startDir);
 
-    int count = scanDirectoryTree(db_data, 0, startDir);
-//  int count = scanDirectoryTree(&db_entries, 0, startDir);
+    int count = scanDirectoryTree( &database, 0, startDir );
     printf("Files (all):      %d\n", count);
 
-    int found = mark_upload_unsorted(db_data, &check, count);
+    int found = mark_upload_unsorted( &database, &check );
     printf("Files (up&un):    %d\n", found);
 
-    int uploads = find_new_uploads(db_data, count);
+    int uploads = find_new_uploads( &database );
     printf("Files (uploads):  %d\n", uploads);
 
     print_db(db_data, count);
