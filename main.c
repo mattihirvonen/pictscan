@@ -95,8 +95,9 @@ void extractPathComponents(const char *filePath, char *path, char *baseName, cha
 
 
 // Return count of file infos added into data base
-int scanDirectoryTree( database_t *db, int count, const char *dirPath)
+int scanDirectoryTree( database_t *db, const char *dirPath)
 {
+    int           count    =  db->count;
     db_columns_t *db_entry = &db->data[ db->count ];
 
     char path[256], baseName[256], extension[256];
@@ -126,7 +127,7 @@ int scanDirectoryTree( database_t *db, int count, const char *dirPath)
             {
                 printf("Directory: %s\n\n", fullPath);
                 // Recursively scan subdirectory
-                count = scanDirectoryTree(db, count, fullPath);
+                count = scanDirectoryTree(db, fullPath);
             } else if (S_ISREG(pathStat.st_mode))
             {
                 extractPathComponents(fullPath, path, baseName, extension);
@@ -283,7 +284,7 @@ int main(int argc, char *argv[])
     const char *startDir = argc > 1 ? argv[1] : "."; // Default to current directory
     printf("Scanning directory: %s\n", startDir);
 
-    int count = scanDirectoryTree( &database, 0, startDir );
+    int count = scanDirectoryTree( &database, startDir );
     printf("Files (all):      %d\n", count);
 
     int found = mark_upload_unsorted( &database, &check );
