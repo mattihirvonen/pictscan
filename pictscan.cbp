@@ -31,6 +31,8 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename=".gitignore" />
+		<Unit filename="README.txt" />
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
