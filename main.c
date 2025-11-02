@@ -15,8 +15,14 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 #define  NAMESIZE  64
 #define  EXTSIZE   8
 #define  DB_SIZE   100000     // DB rows
-#define  UPLOAD    "upload"
-#define  UNSORTED  "unsorted"
+#define  UPLOAD    "./upload"
+#define  UNSORTED  "./unsorted"
+
+
+typedef struct
+{
+    int  debug;
+} options_t;
 
 
 typedef struct
@@ -47,12 +53,15 @@ typedef struct
 
 typedef struct
 {
-    int            count;   // Count of active database entries
+    int            count;     // Count of active database entries
+    int            upload;    // Count of files in "upload" directory tree
+    int            unsorted;  // Count of files in "unsorted" directory tree
     db_columns_t  *data;
     db_columns_t  *head;
 } database_t;
 
 
+options_t     options;
 db_columns_t  db_data[DB_SIZE];
 check_t       check;
 
@@ -128,15 +137,16 @@ void db_update_entry( db_columns_t *db_entry, char *fullPath, struct stat *pathS
     db_entry->mtime    = pathStat->st_mtime;
     db_entry->atime    = pathStat->st_atime;
     //
-    #if 1
-    printf("Count: %d\n", count);
-    printf("File: %s  size=%ld\n", fullPath, pathStat->st_size);
+    if ( options.debug )
+    {
+        printf("Count: %d\n", count);
+        printf("File: %s  size=%ld\n", fullPath, pathStat->st_size);
 
-    printf("Path: %s\n",      db_entry->filePath);
-    printf("Base Name: %s\n", db_entry->baseName);
-    printf("Extension: %s\n", db_entry->extension);
-    printf("\n");
-    #endif
+        printf("Path: %s\n",      db_entry->filePath);
+        printf("Base Name: %s\n", db_entry->baseName);
+        printf("Extension: %s\n", db_entry->extension);
+        printf("\n");
+    }
 }
 
 
@@ -208,24 +218,25 @@ void print_new_upload( db_columns_t *db_entry )
 
 int mark_upload_unsorted( database_t *db, check_t *check )
 {
-    int found = 0;
-    int count = db->count;
-
     db_columns_t *db_entry = db->data;
+    int           count    = db->count;
+
+    db->upload   = 0;
+    db->unsorted = 0;
 
     while ( count--  > 0 )
     {
-        if (strstr(db_entry->filePath, check->upload)) {
+        if (strstr(db_entry->filePath, check->upload) == db_entry->filePath) {
             db_entry->isupload = 1;
-            found += 1;
+            db->upload += 1;
         }
-        if (strstr(db_entry->filePath, check->unsorted)) {
+        if (strstr(db_entry->filePath, check->unsorted) == db_entry->filePath) {
             db_entry->isunsorted = 1;
-            found += 1;
+            db->unsorted += 1;
         }
         db_entry = db_next_entry( db_entry );
     }
-    return found;
+    return db->upload + db->unsorted;
 }
 
 
@@ -294,6 +305,8 @@ int find_new_uploads( database_t *db )
 
 int main(int argc, char *argv[])
 {
+    options.debug = 0;
+
     database_t  database;
 
     memset( &database, 0, sizeof(database_t));
@@ -306,15 +319,16 @@ int main(int argc, char *argv[])
     printf("Scanning directory: %s\n", startDir);
 
     int count = scanDirectoryTree( &database, startDir );
-    printf("Files (all):      %d\n", count);
 
-    int found = mark_upload_unsorted( &database, &check );
-    printf("Files (up&un):    %d\n", found);
+//  print_db(db_data, count);
+    mark_upload_unsorted( &database, &check );
+
+    printf("Files (all):       %d\n", count);
+    printf("Files (upload):    %d\n", database.upload);
+    printf("Files (unsorted):  %d\n", database.unsorted);
 
     int uploads = find_new_uploads( &database );
-    printf("Files (uploads):  %d\n", uploads);
-
-    print_db(db_data, count);
+    printf("Files (new):       %d\n", uploads);
 
     return 0;
 }
