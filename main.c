@@ -18,6 +18,7 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 #define  UPLOAD    "upload"
 #define  UNSORTED  "unsorted"
 
+
 typedef struct
 {
     char upload[NAMESIZE];
@@ -46,8 +47,9 @@ typedef struct
 
 typedef struct
 {
-    int           count;   // Count of active database entries
-    db_columns_t *data;
+    int            count;   // Count of active database entries
+    db_columns_t  *data;
+    db_columns_t  *head;
 } database_t;
 
 
@@ -55,27 +57,30 @@ db_columns_t  db_data[DB_SIZE];
 check_t       check;
 
 
-db_columns_t *db_next_entry( db_columns_t *entry )
+db_columns_t *db_next_entry( db_columns_t *db_entry )
 {
-    #if 1
-    return entry->next;  // Simulate usage of dynamically allocated memory
-    #else
-    return ++entry;
-    #endif
+    return db_entry->next;  // Simulate use of dynamically allocated memory
 }
 
-db_columns_t *db_new_entry( db_columns_t *entry )
+
+db_columns_t *db_new_entry( database_t *db )
 {
-    #if 1
     // Simulate dynamic memory allocation for new db_entry
-    void  *prev = entry;
-    entry->next = entry + 1;
-    entry = entry->next;
-    entry->prev = prev;
-    return  entry;
-    #else
-    return ++entry;
-    #endif
+    db_columns_t *db_entry;
+
+    if ( !db->head ) {
+        db_entry = db->data;
+    }
+    else {
+        db_entry       = db->head;
+        db_entry->next = db_entry + 1;    // Simulate memory allocation
+        db_entry       = db_entry->next;
+        db_entry->prev = db->head;
+    }
+    db->count += 1;
+    db->head   = db_entry;
+    //
+    return  db_entry;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -108,14 +113,36 @@ void extractPathComponents(const char *filePath, char *path, char *baseName, cha
 }
 
 
+void db_update_entry( db_columns_t *db_entry, char *fullPath, struct stat *pathStat, int count )
+{
+    char path[256], baseName[256], extension[256];
+
+    extractPathComponents(fullPath, path, baseName, extension);
+
+    strncpy(db_entry->filePath,  path,      PATHSIZE);
+    strncpy(db_entry->baseName,  baseName,  NAMESIZE);
+    strncpy(db_entry->extension, extension, EXTSIZE);
+    //
+    db_entry->fileSize = pathStat->st_size;
+    db_entry->ctime    = pathStat->st_ctime;
+    db_entry->mtime    = pathStat->st_mtime;
+    db_entry->atime    = pathStat->st_atime;
+    //
+    #if 1
+    printf("Count: %d\n", count);
+    printf("File: %s  size=%ld\n", fullPath, pathStat->st_size);
+
+    printf("Path: %s\n",      db_entry->filePath);
+    printf("Base Name: %s\n", db_entry->baseName);
+    printf("Extension: %s\n", db_entry->extension);
+    printf("\n");
+    #endif
+}
+
+
 // Return count of file infos added into data base
 int scanDirectoryTree( database_t *db, const char *dirPath)
 {
-    int           count    =  db->count;
-    db_columns_t *db_entry = &db->data[ db->count ];
-
-    char path[256], baseName[256], extension[256];
-
     struct dirent *entry;
     DIR *dp = opendir(dirPath);
 
@@ -141,34 +168,14 @@ int scanDirectoryTree( database_t *db, const char *dirPath)
             {
                 printf("Directory: %s\n\n", fullPath);
                 // Recursively scan subdirectory
-                count = scanDirectoryTree(db, fullPath);
+                db->count = scanDirectoryTree(db, fullPath);
             } else if (S_ISREG(pathStat.st_mode))
             {
-                extractPathComponents(fullPath, path, baseName, extension);
-
-                if ( count < DB_SIZE )
+                if ( db->count < DB_SIZE )
                 {
-                    strncpy(db_entry->filePath,  path,      PATHSIZE);
-                    strncpy(db_entry->baseName,  baseName,  NAMESIZE);
-                    strncpy(db_entry->extension, extension, EXTSIZE);
-                    //
-                    db_entry->fileSize = pathStat.st_size;
-                    db_entry->ctime    = pathStat.st_ctime;
-                    db_entry->mtime    = pathStat.st_mtime;
-                    db_entry->atime    = pathStat.st_atime;
-                    count             += 1;
-                    //
-                    #if 1
-                    printf("Count: %d\n", count);
-                    printf("File: %s  size=%ld\n", fullPath, pathStat.st_size);
+                    db_columns_t *db_entry = db_new_entry( db );
 
-                    printf("Path: %s\n",      db_entry->filePath);
-                    printf("Base Name: %s\n", db_entry->baseName);
-                    printf("Extension: %s\n", db_entry->extension);
-                    printf("\n");
-                    #endif
-                    //
-                    db_entry = db_new_entry( db_entry );
+                    db_update_entry( db_entry, fullPath, &pathStat, db->count );
                 }
             }
         } else {
@@ -176,8 +183,7 @@ int scanDirectoryTree( database_t *db, const char *dirPath)
         }
     }
     closedir(dp);
-    db->count = count;
-    return  db->count;
+    return   db->count;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -245,6 +251,7 @@ int check_is_same_file( db_columns_t *entry1, db_columns_t *entry2 )
 }
 
 
+// ToDo: Refactor to be compatible with dynamic memory allocated database
 int find_new_uploads( database_t *db )
 {
     int found = 0;
