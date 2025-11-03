@@ -289,11 +289,9 @@ int find_new_uploads( database_t *db )
     int found = 0;
     int count = db->count;
 
-    db_columns_t *db_entry = db->data;
-
     for (int i = 0; i < count; i++)
     {
-        db_columns_t *entry1 = &db_entry[i];
+        db_columns_t *entry1 = &db->data[i];
         int           exist  = 0;
 
         if ( !entry1->isupload ) {
@@ -302,9 +300,10 @@ int find_new_uploads( database_t *db )
         if ( entry1->isignore ) {
             continue;
         }
+
         for (int j = 0; j < count; j++)
         {
-            db_columns_t *entry2 = &db_entry[j];
+            db_columns_t *entry2 = &db->data[j];
 
             if ( i == j ) {
                 continue;
@@ -316,13 +315,16 @@ int find_new_uploads( database_t *db )
                 continue;
             }
             if ( check_is_same_file(entry1, entry2) ) {
-                exist = 1;
+                exist += 1;
                 break;
             }
         }
         if ( !exist ) {
             print_new_upload(entry1);
             found += 1;
+        }
+        if ( options.verbose && (exist > 1) ) {
+            printf("Multi match for: %s/%s.%s\n", entry1->filePath, entry1->baseName, entry1->extension);
         }
     }
     return found;
