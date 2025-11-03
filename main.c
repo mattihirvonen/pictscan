@@ -219,7 +219,10 @@ void print_db( db_columns_t *db_entry, int count )
 
 void print_new_upload( db_columns_t *db_entry )
 {
-    printf("New upload: %s.%s  size=%ld\n", db_entry->baseName, db_entry->extension, db_entry->fileSize);
+    char line[128];
+
+    snprintf(line, sizeof(line), "%9ld %12s.%-6s - %s", db_entry->fileSize, db_entry->baseName, db_entry->extension, db_entry->filePath);
+    printf("New upload: %s\n", line);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -235,15 +238,15 @@ int mark_upload_unsorted( database_t *db, check_t *check )
 
     while ( count--  > 0 )
     {
+        if (ignore && (strstr(db_entry->filePath, check->ignore) == db_entry->filePath)) {
+            db_entry->isignore = 1;
+            db->ignore += 1;
+        }
         if (strstr(db_entry->filePath, check->upload) == db_entry->filePath) {
             db_entry->isupload = 1;
             db->upload += 1;
         }
-        else if (ignore && (strstr(db_entry->filePath, check->ignore) == db_entry->filePath)) {
-            db_entry->isignore = 1;
-            db->ignore += 1;
-        }
-        else if (strstr(db_entry->filePath, check->unsorted) == db_entry->filePath) {
+        if (strstr(db_entry->filePath, check->unsorted) == db_entry->filePath) {
             db_entry->isunsorted = 1;
             db->unsorted += 1;
         }
@@ -319,9 +322,27 @@ int find_new_uploads( database_t *db )
 
 // ------------------------------------------------------------------------------------------
 
+char *normalize_path( char *newpath, char *path, int size )
+{
+    // Absolute path begin with '/'
+    if ( path[0] == '/') {  return path;  }
+
+    // Relative path must begin with "./" or "../"
+    if ( strstr(path, "./") == path ) { return path;  }
+    if ( strstr(path,"../") == path ) { return path;  }
+
+    // Adjust relative path
+    strncpy( newpath, "./", size - 2);
+    strncat( newpath, path, size - 2);
+    printf("- standardize: <%s>\n", newpath);
+    return   newpath;
+}
+
+
 int parse_options(int argc, char *argv[])
 {
-    int opt;
+    char line[256];
+    int  opt;
 
     // Define the options: "a" and "b:" (b requires an argument)
     while ((opt = getopt(argc, argv, "vu:U:s:i:d")) != -1)
@@ -334,16 +355,16 @@ int parse_options(int argc, char *argv[])
                 options.verbose +=1; // Increase verbose level
                 break;
             case 'u':
-                strncpy(check.upload,   optarg, sizeof(check.upload));
+                strncpy(check.upload,   normalize_path(line,optarg,sizeof(line)), sizeof(check.upload));
                 break;
             case 'U':
-                strncpy(check.unsorted, optarg, sizeof(check.unsorted));
+                strncpy(check.unsorted, normalize_path(line,optarg,sizeof(line)), sizeof(check.unsorted));
                 break;
             case 's':
-                strncpy(check.startDir, optarg, sizeof(check.startDir));
+                strncpy(check.startDir, normalize_path(line,optarg,sizeof(line)), sizeof(check.startDir));
                 break;
             case 'i':
-                strncpy(check.ignore,   optarg, sizeof(check.ignore));
+                strncpy(check.ignore,   normalize_path(line,optarg,sizeof(line)), sizeof(check.ignore));
                 break;
             case '?':
                 // Handle unknown options
