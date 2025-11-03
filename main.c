@@ -10,9 +10,10 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 #include <dirent.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>     // getopt()
 
 #define  PATHSIZE  256
-#define  NAMESIZE  64
+#define  NAMESIZE  128
 #define  EXTSIZE   8
 #define  DB_SIZE   100000     // DB rows
 #define  UPLOAD    "./upload"
@@ -21,14 +22,17 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 
 typedef struct
 {
-    int  debug;
+    int   debug;
+    int   verbose;
 } options_t;
 
 
 typedef struct
 {
-    char upload[NAMESIZE];
-    char unsorted[NAMESIZE];
+    char  startDir[PATHSIZE];   // Default is "./"
+    char  upload[PATHSIZE];     // "import"   directory (called also upload or download)
+    char  unsorted[PATHSIZE];   // "unsorted" directory
+    char  ignore[PATHSIZE];     // Directory path to ignore files in check
 } check_t;
 
 
@@ -48,6 +52,7 @@ typedef struct
     //
     int      isupload;
     int      isunsorted;
+    int      isignore;
 } db_columns_t;
 
 
@@ -56,6 +61,7 @@ typedef struct
     int            count;     // Count of active database entries
     int            upload;    // Count of files in "upload" directory tree
     int            unsorted;  // Count of files in "unsorted" directory tree
+    int            ignore;    // Count of non checked files
     db_columns_t  *data;
     db_columns_t  *head;
 } database_t;
@@ -176,7 +182,9 @@ int scanDirectoryTree( database_t *db, const char *dirPath)
         {
             if (S_ISDIR(pathStat.st_mode))
             {
-                printf("Directory: %s\n\n", fullPath);
+                if (!options.debug && (options.verbose > 1) ) {
+                    printf("Directory: %s\n", fullPath);
+                }
                 // Recursively scan subdirectory
                 db->count = scanDirectoryTree(db, fullPath);
             } else if (S_ISREG(pathStat.st_mode))
@@ -220,6 +228,7 @@ int mark_upload_unsorted( database_t *db, check_t *check )
 {
     db_columns_t *db_entry = db->data;
     int           count    = db->count;
+    int           ignore   = strlen(check->ignore) > 1 ? 1 : 0;
 
     db->upload   = 0;
     db->unsorted = 0;
@@ -230,13 +239,17 @@ int mark_upload_unsorted( database_t *db, check_t *check )
             db_entry->isupload = 1;
             db->upload += 1;
         }
-        if (strstr(db_entry->filePath, check->unsorted) == db_entry->filePath) {
+        else if (ignore && (strstr(db_entry->filePath, check->ignore) == db_entry->filePath)) {
+            db_entry->isignore = 1;
+            db->ignore += 1;
+        }
+        else if (strstr(db_entry->filePath, check->unsorted) == db_entry->filePath) {
             db_entry->isunsorted = 1;
             db->unsorted += 1;
         }
         db_entry = db_next_entry( db_entry );
     }
-    return db->upload + db->unsorted;
+    return db->upload + db->unsorted + db->ignore;
 }
 
 
@@ -288,6 +301,9 @@ int find_new_uploads( database_t *db )
             if ( entry2->isupload ) {
                 continue;
             }
+            if ( entry2->isignore ) {
+                continue;
+            }
             if ( check_is_same_file(entry1, entry2) ) {
                 exist = 1;
                 break;
@@ -303,37 +319,131 @@ int find_new_uploads( database_t *db )
 
 // ------------------------------------------------------------------------------------------
 
+int parse_options(int argc, char *argv[])
+{
+    int opt;
+
+    // Define the options: "a" and "b:" (b requires an argument)
+    while ((opt = getopt(argc, argv, "vu:U:s:i:d")) != -1)
+    {
+        switch (opt) {
+            case 'd':
+                options.debug +=1;   // Increase debug level
+                break;
+            case 'v':
+                options.verbose +=1; // Increase verbose level
+                break;
+            case 'u':
+                strncpy(check.upload,   optarg, sizeof(check.upload));
+                break;
+            case 'U':
+                strncpy(check.unsorted, optarg, sizeof(check.unsorted));
+                break;
+            case 's':
+                strncpy(check.startDir, optarg, sizeof(check.startDir));
+                break;
+            case 'i':
+                strncpy(check.ignore,   optarg, sizeof(check.ignore));
+                break;
+            case '?':
+                // Handle unknown options
+                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                return -1;
+                break;
+        }
+    }
+    // Remaining arguments (non-option arguments)
+    if (optind < argc) {
+        printf("Non-option arguments:\n");
+        for (int i = optind; i < argc; i++) {
+            printf("  %s\n", argv[i]);
+        }
+    }
+    return 0;
+}
+
+
 int main(int argc, char *argv[])
 {
     options.debug = 0;
 
     database_t  database;
 
+    // Set defaults:
+    strncpy(check.upload,   UPLOAD,   sizeof(check.upload));
+    strncpy(check.unsorted, UNSORTED, sizeof(check.unsorted));
+    strncpy(check.startDir, ".",      sizeof(check.startDir)); // Default to current directory
+
+    if ( options.verbose ) {
+        printf("Scanning directory: %s\n", check.startDir);
+    }
+
+    if ( parse_options(argc, argv) ) {
+        return -1;  // Exit: Bad command line argument
+    }
+
     memset( &database, 0, sizeof(database_t));
     database.data = db_data;
 
-    strncpy(check.upload,   UPLOAD,   NAMESIZE);
-    strncpy(check.unsorted, UNSORTED, NAMESIZE);
+    int count = scanDirectoryTree( &database, check.startDir );
 
-    const char *startDir = argc > 1 ? argv[1] : "."; // Default to current directory
-    printf("Scanning directory: %s\n", startDir);
-
-    int count = scanDirectoryTree( &database, startDir );
-
-//  print_db(db_data, count);
     mark_upload_unsorted( &database, &check );
 
-    printf("Files (all):       %d\n", count);
-    printf("Files (upload):    %d\n", database.upload);
-    printf("Files (unsorted):  %d\n", database.unsorted);
-
     int uploads = find_new_uploads( &database );
-    printf("Files (new):       %d\n", uploads);
+
+    if ( options.debug ) {
+         print_db(db_data, count);
+    }
+    if ( options.verbose )
+    {
+         printf("\n");
+         printf("Files (all):       %d\n", count);
+         printf("Files (upload):    %d\n", database.upload);
+         printf("Files (ignored):   %d\n", database.ignore);
+         printf("Files (unsorted):  %d\n", database.unsorted);
+         printf("Files (new):       %d\n", uploads);
+    }
+    return 0;
+}
+
+//================================================================================
+#else
+
+#include <stdio.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+    int opt;
+    // Define the options: "a" and "b:" (b requires an argument)
+    while ((opt = getopt(argc, argv, "ab:c")) != -1) {
+        switch (opt) {
+            case 'a':
+                printf("Option -a was provided\n");
+                break;
+            case 'b':
+                printf("Option -b was provided with argument: %s\n", optarg);
+                break;
+            case 'c':
+                printf("Option -c was provided\n");
+                break;
+            case '?':
+                // Handle unknown options
+                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                break;
+        }
+    }
+
+    // Remaining arguments (non-option arguments)
+    if (optind < argc) {
+        printf("Non-option arguments:\n");
+        for (int i = optind; i < argc; i++) {
+            printf("  %s\n", argv[i]);
+        }
+    }
 
     return 0;
 }
 
-#else
 
 #include <stdio.h>
 #include <stdlib.h>
