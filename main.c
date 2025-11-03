@@ -334,7 +334,6 @@ char *normalize_path( char *newpath, char *path, int size )
     // Adjust relative path
     strncpy( newpath, "./", size - 2);
     strncat( newpath, path, size - 2);
-    printf("- standardize: <%s>\n", newpath);
     return   newpath;
 }
 
