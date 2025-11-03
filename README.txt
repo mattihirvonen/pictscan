@@ -3,8 +3,13 @@ Picture Library Sync
 ====================
 This project goal is to create simple command line application
 to list files which are not yet "archived" properly into
-photo library directory tree.
+photo library directory tree. Application compares only matching
+- file names and
+- file sizes
 
+Why not time stamp? Reason is simple. Copying files between
+Windows 98, Windows NT (XP, ...,Win11), Linux machines or
+FTP transfer modify file's directory time stamp different odd ways.
 
 Photo directory structure example
 
@@ -14,10 +19,10 @@ Photo directory structure example
       +--- 2024_Holiday ------+--- subdir1
       |                       +--- subdir2
       |
-      +--- backup ----+--- subdir1
+      +--- unsorted --+--- subdir1
       |               +--- subdir2
       |
-      +--- unsorted --+--- subdir1
+      +--- backup ----+--- subdir1
       |               +--- subdir2
       |
       +--- upload ----+--- phone1
@@ -33,8 +38,8 @@ Strategy
 
 Command line arguments
 
-  - i [path]  ignore directory for file check
-  - s [path]  "start directory" for file scan (default is ".")
+  - i [path]  Ignore directory for file check
+  - g [path]  "gallery directory" for file scan (default is ".")
   - u [path]  original files "upload" directory tree
   - U [path]  "unsorted" directory tree
   - d         enable debug print option
@@ -42,4 +47,12 @@ Command line arguments
 
 Command line example
 
-  pictscan.exe  -i backup  -u upload  -U unsorted
+  pictscan.exe  -i backup  -u upload  -U unsorted  [direcory_tree]
+
+
+Future ToDo(s)
+--------------
+- compare EXIF or simple CRC for files where name and size match
+- Separate upload directory outside this directory structure
+  (like external USB stick or network drive)
+
