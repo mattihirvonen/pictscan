@@ -283,41 +283,45 @@ int check_is_same_file( db_columns_t *entry1, db_columns_t *entry2 )
 }
 
 
-// ToDo: Refactor to be compatible with dynamic memory allocated database
 int find_new_uploads( database_t *db )
 {
-    int found = 0;
-    int count = db->count;
+    int           found  = 0;
+    db_columns_t *entry1 = db->data;
 
-    for (int i = 0; i < count; i++)
+    while ( entry1 )
     {
-        db_columns_t *entry1 = &db->data[i];
-        int           exist  = 0;
+        int  exist  = 0;
 
         if ( !entry1->isupload ) {
+            entry1  = db_next_entry( entry1 );
             continue;
         }
         if ( entry1->isignore ) {
+            entry1  = db_next_entry( entry1 );
             continue;
         }
 
-        for (int j = 0; j < count; j++)
-        {
-            db_columns_t *entry2 = &db->data[j];
+        db_columns_t *entry2 = db->data;
 
-            if ( i == j ) {
+        while ( entry2 )
+        {
+            if (entry1 == entry2) {
+                entry2  = db_next_entry( entry2 );
                 continue;
             }
-            if ( entry2->isignore ) {
+            if (entry2->isignore) {
+                entry2 = db_next_entry( entry2 );
                 continue;
             }
-            if ( entry2->isupload ) {
+            if (entry2->isupload) {
+                entry2 = db_next_entry( entry2 );
                 continue;
             }
             if ( check_is_same_file(entry1, entry2) ) {
                 exist += 1;
                 break;
             }
+            entry2 = db_next_entry( entry2 );
         }
         if ( !exist ) {
             print_new_upload(entry1);
@@ -326,6 +330,7 @@ int find_new_uploads( database_t *db )
         if ( options.verbose && (exist > 1) ) {
             printf("Multi match for: %s/%s.%s\n", entry1->filePath, entry1->baseName, entry1->extension);
         }
+        entry1 = db_next_entry( entry1 );
     }
     return found;
 }
