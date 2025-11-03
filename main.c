@@ -16,8 +16,10 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 #define  NAMESIZE  128
 #define  EXTSIZE   8
 #define  DB_SIZE   100000     // DB rows
+#define  GALLERY   "."
 #define  UPLOAD    "./upload"
 #define  UNSORTED  "./unsorted"
+#define  IGNORE    "./backup"
 
 
 typedef struct
@@ -29,10 +31,10 @@ typedef struct
 
 typedef struct
 {
-    char  startDir[PATHSIZE];   // Default is "./"
-    char  upload[PATHSIZE];     // "import"   directory (called also upload or download)
-    char  unsorted[PATHSIZE];   // "unsorted" directory
-    char  ignore[PATHSIZE];     // Directory path to ignore files in check
+    char  gallery[PATHSIZE];    // Photo gallery directory tree
+    char  upload[PATHSIZE];     // Photo "import" directory (called also upload or download)
+    char  unsorted[PATHSIZE];   // "unsorted" directory tree
+    char  ignore[PATHSIZE];     // Directory path to ignore files in new files check
 } check_t;
 
 
@@ -163,7 +165,9 @@ int scanDirectoryTree( database_t *db, const char *dirPath)
     DIR *dp = opendir(dirPath);
 
     if (dp == NULL) {
-        perror("opendir");
+        char  errtxt[256];
+        snprintf(errtxt, sizeof(errtxt), "opendir( %s )", dirPath);
+        perror(errtxt);
         return -1;
     }
 
@@ -256,6 +260,7 @@ int mark_upload_unsorted( database_t *db, check_t *check )
 }
 
 
+// Compare: file size and (non case sensitive) file name
 int check_is_same_file( db_columns_t *entry1, db_columns_t *entry2 )
 {
 //  printf("%s - %s.%s - %s - %s.%s\n", entry1->filePath, entry1->baseName, entry1->extension, entry2->filePath, entry2->baseName,  entry2->extension );
@@ -294,6 +299,9 @@ int find_new_uploads( database_t *db )
         if ( !entry1->isupload ) {
             continue;
         }
+        if ( entry1->isignore ) {
+            continue;
+        }
         for (int j = 0; j < count; j++)
         {
             db_columns_t *entry2 = &db_entry[j];
@@ -301,10 +309,10 @@ int find_new_uploads( database_t *db )
             if ( i == j ) {
                 continue;
             }
-            if ( entry2->isupload ) {
+            if ( entry2->isignore ) {
                 continue;
             }
-            if ( entry2->isignore ) {
+            if ( entry2->isupload ) {
                 continue;
             }
             if ( check_is_same_file(entry1, entry2) ) {
@@ -334,6 +342,7 @@ char *normalize_path( char *newpath, char *path, int size )
     // Adjust relative path
     strncpy( newpath, "./", size - 2);
     strncat( newpath, path, size - 2);
+    printf("- standardize: <%s>\n", newpath);
     return   newpath;
 }
 
@@ -344,7 +353,7 @@ int parse_options(int argc, char *argv[])
     int  opt;
 
     // Define the options: "a" and "b:" (b requires an argument)
-    while ((opt = getopt(argc, argv, "vu:U:s:i:d")) != -1)
+    while ((opt = getopt(argc, argv, "vg:u:U:i:d")) != -1)
     {
         switch (opt) {
             case 'd':
@@ -359,8 +368,8 @@ int parse_options(int argc, char *argv[])
             case 'U':
                 strncpy(check.unsorted, normalize_path(line,optarg,sizeof(line)), sizeof(check.unsorted));
                 break;
-            case 's':
-                strncpy(check.startDir, normalize_path(line,optarg,sizeof(line)), sizeof(check.startDir));
+            case 'g':
+                strncpy(check.gallery,  normalize_path(line,optarg,sizeof(line)), sizeof(check.gallery));
                 break;
             case 'i':
                 strncpy(check.ignore,   normalize_path(line,optarg,sizeof(line)), sizeof(check.ignore));
@@ -391,11 +400,12 @@ int main(int argc, char *argv[])
 
     // Set defaults:
     strncpy(check.upload,   UPLOAD,   sizeof(check.upload));
+    strncpy(check.gallery,  GALLERY,  sizeof(check.gallery));
     strncpy(check.unsorted, UNSORTED, sizeof(check.unsorted));
-    strncpy(check.startDir, ".",      sizeof(check.startDir)); // Default to current directory
+    strncpy(check.ignore,   IGNORE,   sizeof(check.ignore));
 
     if ( options.verbose ) {
-        printf("Scanning directory: %s\n", check.startDir);
+        printf("Scanning directory: %s\n", check.gallery);
     }
 
     if ( parse_options(argc, argv) ) {
@@ -405,7 +415,7 @@ int main(int argc, char *argv[])
     memset( &database, 0, sizeof(database_t));
     database.data = db_data;
 
-    int count = scanDirectoryTree( &database, check.startDir );
+    int count = scanDirectoryTree( &database, check.gallery );
 
     mark_upload_unsorted( &database, &check );
 

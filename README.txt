@@ -47,7 +47,7 @@ Command line arguments
 
 Command line example
 
-  pictscan.exe  -i backup  -u upload  -U unsorted  [direcory_tree]
+  pictscan.exe  -i backup  -u upload  -U unsorted  [gallery_direcory_tree]
 
 
 Future ToDo(s)
