@@ -42,7 +42,7 @@ Strategy
 
 Command line arguments
 
-  -i [path]   Ignore directory for file check ("default is "backup")
+  -i [path]   Ignore directory for file check (default is "backup")
   -u [path]   original files "upload" directory tree (defaul is "upload")
   -U [path]   "unsorted" directory tree (default is "unsorted"")
   -m          Print "upload" files which have multiple instances in "gallery"
