@@ -24,8 +24,10 @@ This code uses the POSIX opendir, readdir, and closedir functions, which are com
 
 typedef struct
 {
-    int   debug;
-    int   verbose;
+    int   debug;        // Debug level
+    int   verbose;      // Verbose level
+    int   multiple;     // Print uploads with existing multiple file instances
+    int   recycle;      // Ignore "@Recycle"
 } options_t;
 
 
@@ -64,6 +66,9 @@ typedef struct
     int            upload;    // Count of files in "upload" directory tree
     int            unsorted;  // Count of files in "unsorted" directory tree
     int            ignore;    // Count of non checked files
+    int            newfile;   // Count of new files in "upload" directory tree
+    int            multiple;  // Count of files exist multiple instances
+    //
     db_columns_t  *data;
     db_columns_t  *head;
 } database_t;
@@ -221,12 +226,14 @@ void print_db( db_columns_t *db_entry, int count )
 }
 
 
-void print_new_upload( db_columns_t *db_entry )
+void print_new_upload( db_columns_t *db_entry, int exist )
 {
     char line[128];
 
-    snprintf(line, sizeof(line), "%9ld %12s.%-6s - %s", db_entry->fileSize, db_entry->baseName, db_entry->extension, db_entry->filePath);
-    printf("New upload: %s\n", line);
+    snprintf(line, sizeof(line), "%9ld %20s.%-6s - %s", db_entry->fileSize, db_entry->baseName, db_entry->extension, db_entry->filePath);
+
+    if ( exist > 1 )  {  printf("Multiple(%3d):   %s\n", exist, line);  }
+    else              {  printf("New upload:      %s\n",        line);  }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -283,21 +290,24 @@ int check_is_same_file( db_columns_t *entry1, db_columns_t *entry2 )
 }
 
 
-int find_new_uploads( database_t *db )
+int find_new_uploads( database_t *db, int multimatch )
 {
     int           found  = 0;
     db_columns_t *entry1 = db->data;
 
     while ( entry1 )
     {
-        int  exist  = 0;
+        int  exist = 0;
+        int  skip1 = 0;
 
-        if ( !entry1->isupload ) {
-            entry1  = db_next_entry( entry1 );
-            continue;
+        if ( !entry1->isupload ) {  skip1 +=1;  }
+        if (  entry1->isignore ) {  skip1 +=1;  }
+
+        if ( (options.recycle > 1) && strstr(entry1->filePath, "@Recycle") ) {
+            skip1 +=1;
         }
-        if ( entry1->isignore ) {
-            entry1  = db_next_entry( entry1 );
+        if ( skip1 ) {
+            entry1 = db_next_entry( entry1 );
             continue;
         }
 
@@ -305,34 +315,34 @@ int find_new_uploads( database_t *db )
 
         while ( entry2 )
         {
-            if (entry1 == entry2) {
-                entry2  = db_next_entry( entry2 );
-                continue;
+            int skip2 = 0;
+
+            if (entry1 == entry2) {  skip2 +=1;  }
+            if (entry2->isignore) {  skip2 +=1;  }
+            if (entry2->isupload) {  skip2 +=1;  }
+
+            if ( options.recycle && strstr(entry2->filePath, "@Recycle") ) {
+                skip2 +=1;
             }
-            if (entry2->isignore) {
-                entry2 = db_next_entry( entry2 );
-                continue;
-            }
-            if (entry2->isupload) {
-                entry2 = db_next_entry( entry2 );
-                continue;
-            }
-            if ( check_is_same_file(entry1, entry2) ) {
+            if ( !skip2 && check_is_same_file(entry1, entry2) ) {
                 exist += 1;
-                break;
             }
             entry2 = db_next_entry( entry2 );
         }
         if ( !exist ) {
-            print_new_upload(entry1);
+            print_new_upload(entry1, 0);
             found += 1;
         }
-        if ( options.verbose && (exist > 1) ) {
-            printf("Multi match for: %s/%s.%s\n", entry1->filePath, entry1->baseName, entry1->extension);
+        else if ( exist > 1 ) {
+            db->multiple += 1;
+            if ( multimatch ) {
+                 print_new_upload(entry1, exist);
+            }
         }
         entry1 = db_next_entry( entry1 );
     }
-    return found;
+    db->newfile = found;
+    return  found;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -360,14 +370,20 @@ int parse_options(int argc, char *argv[])
     int  opt;
 
     // Define the options: "a" and "b:" (b requires an argument)
-    while ((opt = getopt(argc, argv, "vg:u:U:i:d")) != -1)
+    while ((opt = getopt(argc, argv, "vg:u:U:i:mrd")) != -1)
     {
         switch (opt) {
             case 'd':
-                options.debug +=1;   // Increase debug level
+                options.debug +=1;    // Increase debug level
                 break;
             case 'v':
-                options.verbose +=1; // Increase verbose level
+                options.verbose +=1;  // Increase verbose level
+                break;
+            case 'm':
+                options.multiple +=1; // Print multiple file names
+                break;
+            case 'r':
+                options.recycle  +=1; // Ignore "@Recycle"
                 break;
             case 'u':
                 strncpy(check.upload,   normalize_path(line,optarg,sizeof(line)), sizeof(check.upload));
@@ -426,7 +442,7 @@ int main(int argc, char *argv[])
 
     mark_upload_unsorted( &database, &check );
 
-    int uploads = find_new_uploads( &database );
+    int uploads = find_new_uploads( &database, options.multiple );
 
     if ( options.debug ) {
          print_db(db_data, count);
@@ -439,6 +455,7 @@ int main(int argc, char *argv[])
          printf("Files (ignored):   %d\n", database.ignore);
          printf("Files (unsorted):  %d\n", database.unsorted);
          printf("Files (new):       %d\n", uploads);
+         printf("Files (multiple):  %d\n", database.multiple);
     }
     return 0;
 }

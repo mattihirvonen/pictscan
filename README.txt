@@ -38,12 +38,14 @@ Strategy
 
 Command line arguments
 
-  - i [path]  Ignore directory for file check
-  - g [path]  "gallery directory" for file scan (default is ".")
-  - u [path]  original files "upload" directory tree
-  - U [path]  "unsorted" directory tree
-  - d         enable debug print option
-  - v         enable verbose mode (multiple use increase verbosity level)
+  -i [path]   Ignore directory for file check
+  -g [path]   "gallery directory" for file scan (default is ".")
+  -u [path]   original files "upload" directory tree
+  -U [path]   "unsorted" directory tree
+  -m          Print "upload" files which have multiple instances in "gallery"
+  -r          Ignore "@Recycle" directory
+  -d          enable debug print option
+  -v          enable verbose mode (multiple use increase verbosity level)
 
 Command line example
 
