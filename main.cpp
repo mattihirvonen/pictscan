@@ -137,7 +137,7 @@ void extractPathComponents(const char *filePath, char *path, char *baseName, cha
 
 void db_update_entry( db_columns_t *db_entry, char *fullPath, struct stat *pathStat, int count )
 {
-    char path[256], baseName[256], extension[256];
+    char path[PATHSIZE], baseName[NAMESIZE], extension[EXTSIZE];
 
     extractPathComponents(fullPath, path, baseName, extension);
 
@@ -366,7 +366,7 @@ char *normalize_path( char *newpath, char *path, int size )
 
 int parse_options(int argc, char *argv[])
 {
-    char line[256];
+    char line[PATHSIZE-8];
     int  opt;
 
     // Define the options: "a" and "b:" (b requires an argument)
@@ -386,16 +386,16 @@ int parse_options(int argc, char *argv[])
                 options.recycle  +=1; // Ignore "@Recycle"
                 break;
             case 'u':
-                strncpy(check.upload,   normalize_path(line,optarg,sizeof(line)), sizeof(check.upload));
+                strncpy(check.upload,   normalize_path(line,optarg,sizeof(line-2)), sizeof(check.upload) - 2);
                 break;
             case 'U':
-                strncpy(check.unsorted, normalize_path(line,optarg,sizeof(line)), sizeof(check.unsorted));
+                strncpy(check.unsorted, normalize_path(line,optarg,sizeof(line-2)), sizeof(check.unsorted) - 2);
                 break;
             case 'g':
-                strncpy(check.gallery,  normalize_path(line,optarg,sizeof(line)), sizeof(check.gallery));
+                strncpy(check.gallery,  normalize_path(line,optarg,sizeof(line-2)), sizeof(check.gallery) - 2);
                 break;
             case 'i':
-                strncpy(check.ignore,   normalize_path(line,optarg,sizeof(line)), sizeof(check.ignore));
+                strncpy(check.ignore,   normalize_path(line,optarg,sizeof(line-2)), sizeof(check.ignore) - 2);
                 break;
             case '?':
                 // Handle unknown options
